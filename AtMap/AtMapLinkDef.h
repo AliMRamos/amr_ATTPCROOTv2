@@ -15,6 +15,8 @@
 #pragma link C++ class AtGadgetIIMap + ;
 #pragma link C++ class AtTpcMap + ;
 #pragma link C++ class AtTpcProtoMap + ;
+#pragma link C++ class AtTpcSquaresMap + ;
+#pragma link C++ class AtTpcTrianglesMap + ;
 #pragma link C++ class AtSpecMATMap + ;
 
 #endif

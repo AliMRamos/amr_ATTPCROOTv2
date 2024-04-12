@@ -17,6 +17,8 @@ AtMap.cxx
 AtTpcMap.cxx
 AtTpcProtoMap.cxx
 AtGadgetIIMap.cxx
+AtTpcSquaresMap.cxx
+AtTpcTrianglesMap.cxx
 AtSpecMATMap.cxx
 )
 
