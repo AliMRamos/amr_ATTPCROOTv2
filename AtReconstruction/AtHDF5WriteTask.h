@@ -20,6 +20,16 @@ class AtHDF5WriteTask : public FairTask {
 protected:
    TString fOutputFileName;
    TString fInputBranchName;
+   bool fSpyral; // Parameter to create a hdf5 file base on Spyral clouds format
+
+   int fMinEvent; // Attribute of the run indicating the min event Spyral will run from
+   int fMaxEvent; // Attribute of the run indicating the max event Spyral will run to
+
+   // Attributes of the event set to -1 by default
+   float fICAmplitude;
+   float fICIntegral;
+   float fICCentroid;
+   float fICMultiplicity;
 
    std::unique_ptr<H5::H5File> fFile{nullptr}; //!
    TClonesArray *fEventArray{nullptr};
@@ -31,7 +41,17 @@ protected:
    Int_t fEventNum{0};
 
 public:
-   AtHDF5WriteTask(TString fileName, TString branchName = "AtEventH");
+   AtHDF5WriteTask(TString fileName, TString branchName = "AtEventH", bool spyral = false);
+
+   void SetEventNumbers(int minValue, int maxValue)
+   {
+      fMinEvent = minValue;
+      fMaxEvent = maxValue;
+   }
+   void SetICAmplitude(float ICAmplitude) { fICAmplitude = ICAmplitude; };
+   void SetICIntegral(float ICIntegral) { fICIntegral = ICIntegral; };
+   void SetICCentroid(float ICCentroid) { fICCentroid = ICCentroid; };
+   void SetICMultiplicity(float ICMultiplicity) { fICMultiplicity = ICMultiplicity; };
 
    void SetPersistence(bool val) { fIsPersistence = val; }
    void SetUseEventNum(bool val) { fUseEventNum = val; }
@@ -41,4 +61,4 @@ public:
    ClassDefOverride(AtHDF5WriteTask, 1);
 };
 
-#endif //#ifndef ATHDF4WRITETASK_H
+#endif // #ifndef ATHDF4WRITETASK_H
