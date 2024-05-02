@@ -69,9 +69,9 @@ void AtHDF5WriteTask::Exec(Option_t *opt)
          const AtHit &hit = event->GetHit(iHit);
 
          auto hitPos = hit.GetPosition();
-         hitsInformation[iHit][0] = hitPos.X();
+         hitsInformation[iHit][0] = -hitPos.X();
          hitsInformation[iHit][1] = hitPos.Y();
-         hitsInformation[iHit][2] = hitPos.Z();
+         hitsInformation[iHit][2] = 1000-hitPos.Z();
          hitsInformation[iHit][3] = hit.GetCharge();
          hitsInformation[iHit][4] = hit.GetTraceIntegral();
          hitsInformation[iHit][5] = 1.0;
