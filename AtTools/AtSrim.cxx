@@ -254,6 +254,22 @@ double AtTools::SRIM::GetEnergyLeft(double reactionPoint, double initialEnergy)
    leftEnergy = GetEnergy(leftDistance);
    return leftEnergy / fIonA;
 }
+/**
+ * Reconstructs the energy value after a energy loss in a given point
+ * @param reactionPoint
+ * @param energyLeft
+ */
+double AtTools::SRIM::GetInitialEnergy(double reactionPoint, double energyLeft)
+{
+   double rangeLeft, rangeTotal;
+   double initialEnergy;
+
+   rangeLeft = GetRange(energyLeft);
+   rangeTotal = rangeLeft + reactionPoint;
+
+   initialEnergy = GetEnergy(rangeTotal);
+   return initialEnergy / fIonA;
+}
 
 void AtTools::SRIM::Draw()
 {

@@ -29,6 +29,7 @@ public:
    double GetRange(double energyValue);
    double GetEnergy(double rangeValue);
    double GetEnergyLeft(double reactionPoint, double initialEnergy);
+   double GetInitialEnergy(double reactionPoint, double energyLeft);
 
    bool IsTargetGas() { return fTargetIsGas; };
    double GetDensity() { return fTargetDensity; };
@@ -37,7 +38,6 @@ public:
    void Print();
    /*
     double GetEnergyLoss;
-
 
     GetEfromEleftandTrackLength
 
