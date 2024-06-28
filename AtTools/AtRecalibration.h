@@ -15,12 +15,12 @@
 #define ATRECALIBRATION_H
 
 #include <TF1.h>
+#include <TSystem.h>
 
 #include "TGraph.h"
 #include "TH2.h"
 
 #include <string>
-#include <tuple>
 #include <vector>
 
 namespace AtTools {
@@ -88,7 +88,7 @@ private:
    std::string fElementName = "element";
    double fMassElement = -1;
 
-   std::string fMassFile = "./massTable.txt";
+   std::string fMassFile = std::string(gSystem->Getenv("VMCWORKDIR")) + "/AtTools/massTable.txt";
    std::vector<int> fNeutronNumber, fProtonNumber, fANumber;
    std::vector<std::string> fElementShortName;
    std::vector<double> fMassUma;
@@ -96,32 +96,39 @@ private:
 
 class KinematicsCalculation {
 public:
-   KinematicsCalculation(MassInformation reactionInfo, double beamEnergy); // beamEnergy units= MeV/A
+   KinematicsCalculation(MassInformation reactionInfo);
+   ~KinematicsCalculation();
 
    // Set Excitation Energy for each particle
+   void SetBeamEnergy(double value)
+   {
+      fBeamEnergyA = value;
+      fBeamEnergyMeV = fBeamEnergyA * fReactionInfo.GetBeamAZ().first;
+   } // beamEnergy units= MeV/A
+
    void SetExEnergyBeam(double value)
    {
       fExBeam = value;
-      fwMassBeam += fExBeam;
+      fwMassBeam = fReactionInfo.GetBeamMass() + fExBeam;
    };
    void SetExEnergyTarget(double value)
    {
       fExTarget = value;
-      fwMassTarget += fExTarget;
+      fwMassTarget = fReactionInfo.GetTargetMass() + fExTarget;
    };
    void SetExEnergyLight(double value)
    {
       fExLight = value;
-      fwMassLight += fExLight;
+      fwMassLight = fReactionInfo.GetLightMass() + fExLight;
    };
    void SetExEnergyHeavy(double value)
    {
       fExHeavy = value;
-      fwMassHeavy += fExHeavy;
+      fwMassHeavy = fReactionInfo.GetHeavyMass() + fExHeavy;
    };
 
    // Get Theoretical Kinematic Values
-   std::vector<double> GetHeavyEenergy() { return fEnergyHeavy; };
+   std::vector<double> GetHeavyEnergy() { return fEnergyHeavy; };
    std::vector<double> GetLightEnergy() { return fEnergyLight; };
    std::vector<double> GetHeavyLabAngle() { return fAngleLABHeavy; };
    std::vector<double> GetLightLabAngle() { return fAngleLABLight; };
@@ -139,10 +146,10 @@ public:
 
    // Real data from recalibration
    double CorrectEnergy(double beamCorrectedEnergy, double thetaLab, double originalEnergy);
-   void FitEnergyCorrection(TH2 *hOriginalCorrectedEnergy, bool draw = false);
+   void FitEnergyCorrection(TH2F *hOriginalCorrectedEnergy, bool draw = false);
    std::pair<double, double> GetFitParameters() { return {fFuncPol1->GetParameter(0), fFuncPol1->GetParameter(1)}; };
    double Recalibration(double originalEnergy);
-   std::pair<double, double> ExAndThetaCM(double finalEnergy, double thetaLAB, double TBeam);
+   std::pair<double, double> ExAndThetaCM(double energyLab, double thetaLAB, double TBeamCorrected);
 
 private:
    double fBeamEnergyA{0.}, fBeamEnergyMeV{0.0};

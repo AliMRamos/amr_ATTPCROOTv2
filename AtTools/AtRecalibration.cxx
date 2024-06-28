@@ -8,7 +8,6 @@
 #include "TMath.h"
 #include "TROOT.h"
 
-#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -283,15 +282,22 @@ void AtTools::MassInformation::Print()
  * @param reactionInfo class containing all the components information
  * @param beamEnergy beam Energy in Mev/A
  **/
-AtTools::KinematicsCalculation::KinematicsCalculation(MassInformation reactionInfo, double beamEnergy)
-   : fReactionInfo(reactionInfo), fBeamEnergyA(beamEnergy)
+AtTools::KinematicsCalculation::KinematicsCalculation(MassInformation reactionInfo)
+   : fReactionInfo(std::move(reactionInfo))
 {
-   fBeamEnergyMeV = fBeamEnergyA * reactionInfo.GetBeamAZ().first;
 
    fwMassBeam = fReactionInfo.GetBeamMass();
    fwMassTarget = fReactionInfo.GetTargetMass();
    fwMassLight = fReactionInfo.GetLightMass();
    fwMassHeavy = fReactionInfo.GetHeavyMass();
+}
+
+AtTools::KinematicsCalculation::~KinematicsCalculation()
+{
+   lightGraph->Delete();
+   heavyGraph->Delete();
+   relationGraph->Delete();
+   lightLabCMGraph->Delete();
 }
 
 /**
@@ -301,6 +307,12 @@ AtTools::KinematicsCalculation::KinematicsCalculation(MassInformation reactionIn
  * */
 void AtTools::KinematicsCalculation::CalculateKinematics()
 {
+   // Reseting vectors
+   fThetaCM.clear();
+   fEnergyLight.clear();
+   fEnergyHeavy.clear();
+   fAngleLABLight.clear();
+   fAngleLABHeavy.clear();
 
    // Initial Values
    double EBeamLAB = fBeamEnergyMeV + fwMassBeam;
@@ -325,7 +337,7 @@ void AtTools::KinematicsCalculation::CalculateKinematics()
    double heavyMomentumCM = TMath::Sqrt(pow(EHeavyCM, 2) - pow(fwMassHeavy, 2));
 
    // Beta and gamma
-   double gamma = ETotal / ETotalCM;
+   double gammaC = ETotal / ETotalCM;
    double beta = beamMomentum / ETotal;
 
    // Lorentz transformations to lab
@@ -334,8 +346,8 @@ void AtTools::KinematicsCalculation::CalculateKinematics()
       double angleRad = angle * TMath::DegToRad();
 
       // Light particle
-      double ELight = gamma * (ELightCM + beta * lightMomentumCM * cos(angleRad));
-      double lightMomentumLabX = gamma * (lightMomentumCM * cos(angleRad) + beta * ELightCM);
+      double ELight = gammaC * (ELightCM + beta * lightMomentumCM * cos(angleRad));
+      double lightMomentumLabX = gammaC * (lightMomentumCM * cos(angleRad) + beta * ELightCM);
       double lightMomentumLabY = lightMomentumCM * sin(angleRad);
       double lightMomentumLab = TMath::Sqrt(pow(lightMomentumLabX, 2) + pow(lightMomentumLabY, 2));
       double cosThetaLight = (ELight * ETotal - ELightCM * ETotalCM) / (beamMomentum * lightMomentumLab);
@@ -350,12 +362,19 @@ void AtTools::KinematicsCalculation::CalculateKinematics()
       // Heavy particle
       double tg_thetaHeavy =
          heavyMomentumCM * sin(angleRad) /
-         (gamma * (heavyMomentumCM * cos(angleRad) +
-                   beta * TMath::Sqrt(heavyMomentumCM * heavyMomentumCM + fwMassHeavy * fwMassHeavy)));
+         (gammaC * (heavyMomentumCM * cos(angleRad) +
+                    beta * TMath::Sqrt(heavyMomentumCM * heavyMomentumCM + fwMassHeavy * fwMassHeavy)));
       fAngleLABHeavy.push_back(atan(tg_thetaHeavy) * TMath::RadToDeg());
       double EHeavy = ETotal - ELight;
       fEnergyHeavy.push_back((EHeavy - fwMassHeavy));
    }
+
+   // filling tgraphs
+   int nPoints = fThetaCM.size();
+   lightGraph = new TGraph(nPoints, &fAngleLABLight[0], &fEnergyLight[0]);
+   heavyGraph = new TGraph(nPoints, &fAngleLABHeavy[0], &fEnergyHeavy[0]);
+   relationGraph = new TGraph(nPoints, &fThetaCM[0], &fAngleLABLight[0]);
+   lightLabCMGraph = new TGraph(nPoints, &fAngleLABHeavy[0], &fAngleLABLight[0]);
 }
 
 /**
@@ -374,16 +393,17 @@ double AtTools::KinematicsCalculation::CorrectEnergy(double beamCorrectedEnergy,
 
    // Initial Values
    double TBeam = beamCorrectedEnergy * fReactionInfo.GetBeamAZ().first;
+
    double EBeamLAB = TBeam + wMassBeam;
    double beamMomentumCM = TMath::Sqrt(2 * wMassBeam * TBeam + pow(TBeam, 2));
-   double momentumLab = beamMomentumCM * cos(thetaLab * TMath::Pi() / 180.);
+   double momentumLab = beamMomentumCM * cos(thetaLab * TMath::DegToRad());
 
    // Members for the second order energy equation
-   double C1 = pow(wMassBeam, 2) + pow(wMassTarget, 2) + pow(wMassHeavy, 2) + 2 * EBeamLAB * wMassTarget;
-   double X1 = pow(wMassLight, 2) - C1 + 2 * (EBeamLAB + wMassTarget) * wMassHeavy;
+   double C1 = pow(wMassBeam, 2) + pow(wMassTarget, 2) + pow(wMassLight, 2) + 2 * EBeamLAB * wMassTarget;
+   double X1 = pow(wMassHeavy, 2) - C1 + 2 * (EBeamLAB + wMassTarget) * wMassLight;
 
    double a = pow((EBeamLAB + wMassTarget) / (momentumLab), 2) - 1;
-   double b = (((EBeamLAB + wMassTarget) * X1) / pow(momentumLab, 2)) - 2 * wMassHeavy;
+   double b = (((EBeamLAB + wMassTarget) * X1) / pow(momentumLab, 2)) - 2 * wMassLight;
    double c = pow(X1 / (2 * momentumLab), 2);
 
    // Solving equation taking into account both solutions
@@ -403,10 +423,11 @@ double AtTools::KinematicsCalculation::CorrectEnergy(double beamCorrectedEnergy,
 /**
  *
  */
-void AtTools::KinematicsCalculation::FitEnergyCorrection(TH2 *hOriginalCorrectedEnergy, bool draw)
+void AtTools::KinematicsCalculation::FitEnergyCorrection(TH2F *hOriginalCorrectedEnergy, bool draw)
 {
-   fFuncPol1->SetRange(hOriginalCorrectedEnergy->GetXaxis()->GetXmin(),
-                       hOriginalCorrectedEnergy->GetXaxis()->GetXmax());
+   fFuncPol1->SetRange(
+      hOriginalCorrectedEnergy->GetXaxis()->GetBinLowEdge(hOriginalCorrectedEnergy->FindFirstBinAbove(0, 1)),
+      hOriginalCorrectedEnergy->GetXaxis()->GetBinUpEdge(hOriginalCorrectedEnergy->FindLastBinAbove(0, 1)));
    hOriginalCorrectedEnergy->Fit(fFuncPol1, "RNQF");
 
    if (draw) {
@@ -428,55 +449,72 @@ double AtTools::KinematicsCalculation::Recalibration(double originalEnergy)
    return fFuncPol1->GetParameter(0) + fFuncPol1->GetParameter(1) * originalEnergy;
 }
 
-std::pair<double, double> AtTools::KinematicsCalculation::ExAndThetaCM(double energy, double theta, double TBeam)
+/**
+ *Obtains Ex and thetaCM for a given ELab and thetaLAB
+ */
+std::pair<double, double>
+AtTools::KinematicsCalculation::ExAndThetaCM(double energyLab, double thetaLAB, double TBeamCorrected)
 {
-   // double ExLight = ExCalculation();
+   double Ex, thetaCM;
+   double massBeam = fReactionInfo.GetBeamMass();
+   double TBeam = TBeamCorrected + massBeam;
+   double EBeam = massBeam + TBeamCorrected;
 
-   // this->SetExEnergyLight(ExLight);
+   double momentumBeam = TMath::Sqrt(2 * massBeam * TBeamCorrected + pow(TBeamCorrected, 2));
+   double momentumLight = TMath::Sqrt(2 * fReactionInfo.GetLightMass() * energyLab + pow(energyLab, 2));
+   double C1 = pow(massBeam, 2) + pow(fReactionInfo.GetTargetMass(), 2) + pow(fReactionInfo.GetLightMass(), 2) +
+               2 * EBeam * fReactionInfo.GetTargetMass();
+   Ex = TMath::Sqrt(C1 - 2 * (EBeam + fReactionInfo.GetTargetMass()) * (fReactionInfo.GetLightMass() + energyLab) +
+                    2 * momentumBeam * momentumLight * cos(thetaLAB * TMath::DegToRad())) -
+        fReactionInfo.GetHeavyMass();
 
-   // Setting Reaction masses
-   double wMassBeam = fReactionInfo.GetBeamMass() + fExBeam;
-   double wMassTarget = fReactionInfo.GetTargetMass() + fExTarget;
-   double wMassLight = fReactionInfo.GetLightMass() + fExLight;
-   double wMassHeavy = fReactionInfo.GetHeavyMass() + fExHeavy;
+   double massHeavy = fReactionInfo.GetHeavyMass() + Ex;
+   double massLight = fReactionInfo.GetLightMass();
+   double ELight = energyLab + massLight;
+   double ETotal = EBeam + fReactionInfo.GetTargetMass();
+   double ETotalCM = TMath::Sqrt(2 * EBeam * fReactionInfo.GetTargetMass() + pow(fReactionInfo.GetTargetMass(), 2) +
+                                 pow(massHeavy, 2));
+   double ELightCM =
+      0.5 * (ETotalCM + (pow(fReactionInfo.GetLightMass(), 2) - pow(fReactionInfo.GetHeavyMass(), 2)) / ETotalCM);
+   double momentumLightCM = TMath::Sqrt(pow(ELightCM, 2) - pow(fReactionInfo.GetLightMass(), 2));
 
-   double Eheavy = 0;
-   return {0, 1};
+   double gammaC = ETotal / ETotalCM;
+   double beta = momentumBeam / ETotal;
+
+   double cosThetaCM = ((ELight / gammaC) - ELightCM) / (beta * momentumLightCM);
+   thetaCM = 180. - acos(cosThetaCM) * TMath::RadToDeg();
+   return {Ex, thetaCM};
 }
 
 void AtTools::KinematicsCalculation::Plot()
 {
    // TODO :si no se corre la cinematica el plot saldra vacio, comprobar si se ha corrido para los plots
-   AtTools::KinematicsCalculation::CalculateKinematics();
+   if (fThetaCM.empty()) {
+      AtTools::KinematicsCalculation::CalculateKinematics();
+   }
 
-   int nPoints = fThetaCM.size();
-   TGraph *g = new TGraph(nPoints, &fAngleLABLight[0], &fEnergyLight[0]);
-   TGraph *g2 = new TGraph(nPoints, &fAngleLABHeavy[0], &fEnergyHeavy[0]);
-   TGraph *g3 = new TGraph(nPoints, &fThetaCM[0], &fAngleLABLight[0]);
-   TGraph *g3p = new TGraph(nPoints, &fAngleLABHeavy[0], &fAngleLABLight[0]);
+   lightGraph->GetXaxis()->SetTitle("#theta_{lab} (deg)");
+   lightGraph->GetYaxis()->SetTitle("Energy (MeV)");
+   heavyGraph->GetXaxis()->SetTitle("#theta_{lab} (deg)");
+   heavyGraph->GetYaxis()->SetTitle("Energy (MeV)");
+   relationGraph->GetXaxis()->SetTitle("#theta_{CM} (deg)");
+   relationGraph->GetYaxis()->SetTitle("#theta_{Lab} (deg)");
+   lightLabCMGraph->GetXaxis()->SetTitle("#theta_{Lab} Scatter (deg)");
+   lightLabCMGraph->GetYaxis()->SetTitle("#theta_{Lab} Recoil (deg)");
 
-   g->GetXaxis()->SetTitle("#theta_{lab} (deg)");
-   g->GetYaxis()->SetTitle("Energy (MeV)");
-   g2->GetXaxis()->SetTitle("#theta_{lab} (deg)");
-   g2->GetYaxis()->SetTitle("Energy (MeV)");
-   g3->GetXaxis()->SetTitle("#theta_{CM} (deg)");
-   g3->GetYaxis()->SetTitle("#theta_{Lab} (deg)");
-   g3p->GetXaxis()->SetTitle("#theta_{Lab} Scatter (deg)");
-   g3p->GetYaxis()->SetTitle("#theta_{Lab} Recoil (deg)");
+   TCanvas *cKinematics = new TCanvas("KinematicLines", "Kinematic Lines", 1000, 1000);
+   cKinematics->Divide(2, 2);
 
-   TCanvas *c1 = new TCanvas();
-   c1->Divide(2, 2);
+   cKinematics->Draw();
+   cKinematics->cd(1);
+   lightGraph->DrawClone("AC");
 
-   c1->Draw();
-   c1->cd(1);
-   g->Draw("AC");
+   cKinematics->cd(2);
+   heavyGraph->DrawClone("AC");
 
-   c1->cd(2);
-   g2->Draw("AC");
+   cKinematics->cd(3);
+   relationGraph->DrawClone("AC");
 
-   c1->cd(3);
-   g3->Draw("AC");
-
-   c1->cd(4);
-   g3p->Draw("AC");
+   cKinematics->cd(4);
+   lightLabCMGraph->DrawClone("AC");
 }
